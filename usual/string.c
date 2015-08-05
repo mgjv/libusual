@@ -24,7 +24,10 @@
 #include <usual/bytemap.h>
 
 #include <errno.h>
+#include <locale.h>
+#ifdef HAVE_XLOCALE_H
 #include <xlocale.h>
+#endif
 #ifdef HAVE_LANGINFO_H
 #include <langinfo.h>
 #endif
@@ -599,3 +602,42 @@ einval:
 }
 
 #endif
+
+#ifndef HAVE_STRSEP
+
+char *strsep(char **stringp, const char *delim)
+{
+	char *end, *start = *stringp;
+	if (start) {
+		end = start + strcspn(start, delim);
+		*stringp = *end ? end + 1 : NULL;
+		*end = 0;
+	}
+	return start;
+}
+
+#endif
+
+#ifndef HAVE_ASPRINTF
+
+int asprintf(char **dst_p, const char *fmt, ...)
+{
+	int res;
+	va_list ap;
+	va_start(ap, fmt);
+	res = vasprintf(dst_p, fmt, ap);
+	va_end(ap);
+	return res;
+}
+
+#endif
+
+#ifndef HAVE_VASPRINTF
+
+int vasprintf(char **dst_p, const char *fmt, va_list ap)
+{
+	return cx_vasprintf(NULL, dst_p, fmt, ap);
+}
+
+#endif
+

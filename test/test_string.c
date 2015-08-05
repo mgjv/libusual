@@ -408,6 +408,85 @@ static void test_strtonum(void *p)
 end:;
 }
 
+static const char *run_strsep(const char *input, const char *delim)
+{
+	static char buf[1024];
+	static char res[1024];
+	char *ptr, *tok;
+
+	strlcpy(buf, input, sizeof(buf));
+	res[0] = 0;
+
+	for (ptr = buf; ptr; ) {
+		tok = strsep(&ptr, delim);
+		if (!tok) tok = "NULL";
+		strlcat(res, "(", sizeof(res));
+		strlcat(res, tok, sizeof(res));
+		strlcat(res, ")", sizeof(res));
+	}
+	return res;
+}
+
+static void test_strsep(void *p)
+{
+	char *ptr = NULL;
+
+	tt_assert(strsep(&ptr, "x") == NULL);
+	str_check(run_strsep("", ""), "()");
+	str_check(run_strsep("qwe", ""), "(qwe)");
+	str_check(run_strsep("", ","), "()");
+	str_check(run_strsep("a,b,,c", ","), "(a)(b)()(c)");
+	str_check(run_strsep(",,", ","), "()()()");
+	str_check(run_strsep(",:,", ",:"), "()()()()");
+	str_check(run_strsep(",:,", ":,"), "()()()()");
+	str_check(run_strsep("", ",:"), "()");
+	str_check(run_strsep(" a , b : c ", ",:"), "( a )( b )( c )");
+end:;
+}
+
+
+static void test_snprintf(void *p)
+{
+	char buf[32];
+	char *longstr = "0123456789";
+	int_check(snprintf(buf, 7, "%s", longstr), 10);
+	int_check(snprintf(buf, 8, "%s", longstr), 10);
+	int_check(snprintf(buf, 9, "%s", longstr), 10);
+	int_check(snprintf(buf, 10, "%s", longstr), 10);
+	int_check(snprintf(buf, 11, "%s", longstr), 10);
+	int_check(snprintf(buf, 12, "%s", longstr), 10);
+end:;
+}
+
+static void test_asprintf(void *p)
+{
+	char *res = NULL;
+
+	int_check(asprintf(&res, "%s", "1234"), 4);
+	str_check(res, "1234");
+	free(res);
+end:;
+}
+
+static int tmp_asprintf(char **dst, const char *fmt, ...)
+{
+	int res;
+	va_list ap;
+	va_start(ap, fmt);
+	res = vasprintf(dst, fmt, ap);
+	va_end(ap);
+	return res;
+}
+
+static void test_vasprintf(void *p)
+{
+	char *res = NULL;
+	int_check(tmp_asprintf(&res, "%s", "1234"), 4);
+	str_check(res, "1234");
+	free(res);
+end:;
+}
+
 /*
  * Describe
  */
@@ -421,12 +500,16 @@ struct testcase_t string_tests[] = {
 	{ "mempbrk", test_mempbrk },
 	{ "memcspn", test_memcspn },
 	{ "memspn", test_memspn},
+	{ "strsep", test_strsep },
 	{ "basename", test_basename },
 	{ "dirname", test_dirname },
 	{ "strlist", test_strlist },
 	{ "parse_wordlist", test_wlist },
 	{ "str2double_dot", test_s2d_dot },
 	{ "strtonum", test_strtonum },
+	{ "snprintf", test_snprintf },
+	{ "asprintf", test_asprintf },
+	{ "vasprintf", test_vasprintf },
 	END_OF_TESTCASES
 };
 

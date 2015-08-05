@@ -24,8 +24,6 @@
 #include <usual/ctype.h>
 #include <usual/bytemap.h>
 #include <usual/string.h>
-#include <string.h>
-#include <stdarg.h>
 #include <math.h>
 
 #define TYPE_BITS	3
@@ -35,6 +33,9 @@
 #define JSON_MAX_KEY	(1024*1024)
 
 #define NUMBER_BUF	100
+
+#define JSON_MAXINT	((1LL << 53) - 1)
+#define JSON_MININT	(-(1LL << 53) + 1)
 
 /*
  * Common struct for all JSON values
@@ -512,15 +513,17 @@ static bool parse_number(struct JsonContext *ctx, const char **src_p, const char
 	tokend = buf;
 	if (type == JSON_FLOAT) {
 		v_float = strtod_dot(buf, &tokend);
+		if (*tokend != 0 || errno || !isfinite(v_float))
+			goto failed;
 	} else if (len < 8) {
 		v_int = strtol(buf, &tokend, 10);
+		if (*tokend != 0 || errno)
+			goto failed;
 	} else {
 		v_int = strtoll(buf, &tokend, 10);
+		if (*tokend != 0 || errno || v_int < JSON_MININT || v_int > JSON_MAXINT)
+			goto failed;
 	}
-	if (*tokend != 0 || errno)
-		goto failed;
-	if (type == JSON_FLOAT && !isfinite(v_float))
-		goto failed;
 
 	/* create value struct */
 	jv = mk_value(ctx, type, 0, true);
@@ -535,6 +538,8 @@ static bool parse_number(struct JsonContext *ctx, const char **src_p, const char
 	*src_p = src;
 	return true;
 failed:
+	if (!errno)
+		errno = EINVAL;
 	return err_false(ctx, "Number parse failed");
 }
 
@@ -1559,6 +1564,11 @@ struct JsonValue *json_new_bool(struct JsonContext *ctx, bool val)
 struct JsonValue *json_new_int(struct JsonContext *ctx, int64_t val)
 {
 	struct JsonValue *jv;
+
+	if (val < JSON_MININT || val > JSON_MAXINT) {
+		errno = ERANGE;
+		return NULL;
+	}
 
 	jv = mk_value(ctx, JSON_INT, 0, false);
 	if (jv)

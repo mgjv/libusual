@@ -9,7 +9,11 @@ dnl Order does not matter:
 dnl  AC_USUAL_CASSERT
 dnl  AC_USUAL_WERROR
 dnl  AC_USUAL_DEBUG
-
+dnl Optional features:
+dnl  AC_USUAL_LIBEVENT / AC_USUAL_LIBEVENT_OPT
+dnl  AC_USUAL_UREGEX
+dnl  AC_USUAL_GETADDRINFO_A
+dnl  AC_USUAL_TLS
 
 dnl
 dnl  AC_USUAL_INIT:
@@ -183,7 +187,7 @@ AC_CHECK_HEADERS([sys/param.h sys/uio.h pwd.h grp.h])
 AC_CHECK_HEADERS([sys/wait.h sys/mman.h syslog.h netdb.h dlfcn.h])
 AC_CHECK_HEADERS([err.h pthread.h endian.h sys/endian.h byteswap.h])
 AC_CHECK_HEADERS([malloc.h regex.h getopt.h fnmatch.h])
-AC_CHECK_HEADERS([langinfo.h])
+AC_CHECK_HEADERS([langinfo.h xlocale.h])
 dnl ucred.h may have prereqs
 AC_CHECK_HEADERS([ucred.h sys/ucred.h], [], [], [
 #ifdef HAVE_SYS_TYPES_H
@@ -202,13 +206,14 @@ dnl
 AC_DEFUN([AC_USUAL_FUNCTION_CHECK], [
 ### Functions provided if missing
 dnl AC_CHECK_FUNCS(basename dirname) # unstable, provide always
-AC_CHECK_FUNCS(strlcpy strlcat memmem getpeereid sigaction sigqueue)
+AC_CHECK_FUNCS(strlcpy strlcat strsep memmem getpeereid sigaction sigqueue)
 AC_CHECK_FUNCS(inet_ntop inet_pton poll getline memrchr regcomp)
 AC_CHECK_FUNCS(err errx warn warnx getprogname setprogname)
 AC_CHECK_FUNCS(posix_memalign memalign valloc explicit_bzero memset_s reallocarray)
 AC_CHECK_FUNCS(getopt getopt_long getopt_long_only)
 AC_CHECK_FUNCS(fls flsl flsll ffs ffsl ffsll)
 AC_CHECK_FUNCS(fnmatch mbsnrtowcs nl_langinfo strtod_l strtonum)
+AC_CHECK_FUNCS(asprintf vasprintf)
 ### Functions provided only on win32
 AC_CHECK_FUNCS(localtime_r gettimeofday recvmsg sendmsg usleep getrusage)
 ### Functions used by libusual itself
@@ -409,3 +414,96 @@ else
   LIBS="$LIBS $PTHREAD_LIBS"
 fi
 ])
+
+
+dnl
+dnl  AC_USUAL_TLS:  --with-openssl [ / --with-gnutls ? ]
+dnl
+dnl  AC_USUAL_TLS           - prefer-yes:
+dnl     default             - search for libssl, error if not found
+dnl     --with-openssl      - search for libssl, error if not found
+dnl     --with-openssl=pfx  - search for libssl, error if not found, use pfx
+dnl     --without-openssl   - no tls
+dnl
+AC_DEFUN([AC_USUAL_TLS],[
+
+dnl values: no, libssl, auto
+tls_support=auto
+
+TLS_CPPFLAGS=""
+TLS_LDFLAGS=""
+TLS_LIBS=""
+
+AC_MSG_CHECKING([for OpenSSL])
+AC_ARG_WITH(openssl,
+  AC_HELP_STRING([--with-openssl=prefix], [Specify where OpenSSL is installed]),
+  [ if test "$withval" = "no"; then
+      tls_support=no
+    elif test "$withval" = "yes"; then
+      tls_support=libssl
+      TLS_LIBS="-lssl -lcrypto"
+    else
+      tls_support=libssl
+      TLS_CPPFLAGS="-I$withval/include"
+      TLS_LDFLAGS="-L$withval/lib"
+      TLS_LIBS="-lssl -lcrypto"
+    fi
+  ], [
+    tls_support=auto
+    TLS_CPPFLAGS=""
+    TLS_LDFLAGS=""
+    TLS_LIBS="-lssl -lcrypto"
+  ])
+
+dnl check if libssl works
+if test "$tls_support" = "auto" -o "$tls_support" = "libssl"; then
+  AC_DEFINE(USUAL_LIBSSL_FOR_TLS, 1, [Use libssl for TLS.])
+  tmp_LIBS="$LIBS"
+  tmp_LDFLAGS="$LDFLAGS"
+  tmp_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$TLS_CPPFLAGS $CPPFLAGS"
+  LDFLAGS="$TLS_LDFLAGS $LDFLAGS"
+  LIBS="$TLS_LIBS $LIBS"
+  AC_LINK_IFELSE([
+    AC_LANG_PROGRAM([[#include <openssl/ssl.h>]],
+                    [[SSL_CTX *ctx = SSL_CTX_new(TLSv1_2_method());]])],
+    [ tls_support=yes; AC_MSG_RESULT([found])],
+    [ AC_MSG_ERROR([not found]) ])
+  dnl check LibreSSL-only APIs
+  AC_CHECK_FUNCS(SSL_CTX_use_certificate_chain_mem SSL_CTX_load_verify_mem)
+  CPPFLAGS="$tmp_CPPFLAGS"
+  LDFLAGS="$tmp_LDFLAGS"
+  LIBS="$tmp_LIBS"
+
+  dnl Pick default root CA file
+  cafile=auto
+  AC_MSG_CHECKING([for root CA certs])
+  AC_ARG_WITH(root-ca-file,
+    AC_HELP_STRING([--with-root-ca-file=cafile], [Specify where root CA certs are.]),
+    [ if test "$withval" = "no"; then
+        :
+      elif test "$withval" = "yes"; then
+        :
+      else
+        cafile="$withval"
+      fi
+    ])
+  if test "$cafile" = "auto"; then
+    for cafile in /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem; do
+      if test -f "$cafile"; then
+        break
+      fi
+    done
+  fi
+  AC_DEFINE_UNQUOTED(USUAL_TLS_CA_FILE, ["$cafile"], [Path to root CA certs.])
+  AC_MSG_RESULT([$cafile])
+fi
+
+AC_SUBST(tls_support)
+AC_SUBST(TLS_CPPFLAGS)
+AC_SUBST(TLS_LDFLAGS)
+AC_SUBST(TLS_LIBS)
+
+]) dnl  AC_USUAL_TLS
+
+
