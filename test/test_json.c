@@ -27,11 +27,11 @@ static const char *simple_value(const char *json)
 			res = val ? "TRUE" : "FALSE";
 		}
 	} else if (json_value_is_int(obj)) {
-		long val;
+		int64_t val;
 		if (!json_value_as_int(obj, &val)) {
 			res = "ELONG";
 		} else {
-			snprintf(buf, sizeof(buf), "INT:%ld", val);
+			snprintf(buf, sizeof(buf), "INT:%lld", (long long)val);
 			res = buf;
 		}
 	} else if (json_value_is_float(obj)) {
@@ -79,6 +79,7 @@ static const char *rerender_opts(const char *json, int opts)
 	static char buf[1024];
 	struct MBuf dst;
 
+	memset(buf, 0, sizeof buf);
 	mbuf_init_fixed_writer(&dst, buf, sizeof(buf));
 
 	ctx = json_new_context(NULL, 128);
@@ -103,6 +104,7 @@ static const char *xrerender_opts(const char *xjson, int opts)
 	char *s;
 	const char *res;
 
+	memset(buf, 0, sizeof buf);
 	strlcpy(buf, xjson, sizeof(buf));
 	for (s = buf; *s; s++) {
 		if (*s == '|')
@@ -274,7 +276,7 @@ static void test_json_fetch(void *p)
 	bool bval;
 	const char *sval;
 	size_t slen;
-	long ival;
+	int64_t ival;
 	double fval;
 
 	ctx = json_new_context(NULL, 128);
@@ -353,7 +355,7 @@ end:
 static bool dict_walker(void *arg, struct JsonValue *key, struct JsonValue *val)
 {
 	const char *k;
-	long v;
+	int64_t v;
 	int *counter = arg;
 
 	if (!json_value_as_string(key, &k, NULL))
@@ -369,7 +371,7 @@ static bool dict_walker(void *arg, struct JsonValue *key, struct JsonValue *val)
 
 static bool list_walker(void *arg, struct JsonValue *elem)
 {
-	long v;
+	int64_t v;
 	int *counter = arg;
 
 	if (!json_value_as_int(elem, &v))

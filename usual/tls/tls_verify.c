@@ -23,11 +23,12 @@
 
 #include "tls_internal.h"
 
-int tls_match_name(const char *cert_name, const char *name);
-int tls_check_subject_altname(struct tls *ctx, X509 *cert, const char *name);
-int tls_check_common_name(struct tls *ctx, X509 *cert, const char *name);
+static int tls_match_name(const char *cert_name, const char *name);
+static int tls_check_subject_altname(struct tls *ctx, X509 *cert,
+    const char *name);
+static int tls_check_common_name(struct tls *ctx, X509 *cert, const char *name);
 
-int
+static int
 tls_match_name(const char *cert_name, const char *name)
 {
 	const char *cert_domain, *domain, *next_dot;
@@ -65,6 +66,9 @@ tls_match_name(const char *cert_name, const char *name)
 
 		domain = strchr(name, '.');
 
+		/* No wildcard match against a name with no host part. */
+		if (name[0] == '.')
+			return -1;
 		/* No wildcard match against a name with no domain part. */
 		if (domain == NULL || strlen(domain) == 1)
 			return -1;
@@ -77,7 +81,7 @@ tls_match_name(const char *cert_name, const char *name)
 }
 
 /* See RFC 5280 section 4.2.1.6 for SubjectAltName details. */
-int
+static int
 tls_check_subject_altname(struct tls *ctx, X509 *cert, const char *name)
 {
 	STACK_OF(GENERAL_NAME) *altname_stack = NULL;
@@ -120,8 +124,8 @@ tls_check_subject_altname(struct tls *ctx, X509 *cert, const char *name)
 				data = ASN1_STRING_data(altname->d.dNSName);
 				len = ASN1_STRING_length(altname->d.dNSName);
 
-				if (len < 0 || (size_t)len != strlen(data)) {
-					tls_set_error(ctx,
+				if (len < 0 || len != (int)strlen(data)) {
+					tls_set_errorx(ctx,
 					    "error verifying name '%s': "
 					    "NUL byte in subjectAltName, "
 					    "probably a malicious certificate",
@@ -164,7 +168,7 @@ tls_check_subject_altname(struct tls *ctx, X509 *cert, const char *name)
 			data = ASN1_STRING_data(altname->d.iPAddress);
 
 			if (datalen < 0) {
-				tls_set_error(ctx,
+				tls_set_errorx(ctx,
 				    "Unexpected negative length for an "
 				    "IP address: %d", datalen);
 				rv = -2;
@@ -187,7 +191,7 @@ tls_check_subject_altname(struct tls *ctx, X509 *cert, const char *name)
 	return rv;
 }
 
-int
+static int
 tls_check_common_name(struct tls *ctx, X509 *cert, const char *name)
 {
 	X509_NAME *subject_name;
@@ -213,8 +217,8 @@ tls_check_common_name(struct tls *ctx, X509 *cert, const char *name)
 	    common_name_len + 1);
 
 	/* NUL bytes in CN? */
-	if ((size_t)common_name_len != strlen(common_name)) {
-		tls_set_error(ctx, "error verifying name '%s': "
+	if (common_name_len != (int)strlen(common_name)) {
+		tls_set_errorx(ctx, "error verifying name '%s': "
 		    "NUL byte in Common Name field, "
 		    "probably a malicious certificate", name);
 		rv = -2;
@@ -236,53 +240,21 @@ tls_check_common_name(struct tls *ctx, X509 *cert, const char *name)
 
 	if (tls_match_name(common_name, name) == 0)
 		rv = 0;
-out:
+ out:
 	free(common_name);
 	return rv;
 }
 
 int
-tls_check_servername(struct tls *ctx, X509 *cert, const char *servername)
+tls_check_name(struct tls *ctx, X509 *cert, const char *name)
 {
 	int	rv;
 
-	rv = tls_check_subject_altname(ctx, cert, servername);
+	rv = tls_check_subject_altname(ctx, cert, name);
 	if (rv == 0 || rv == -2)
 		return rv;
 
-	return tls_check_common_name(ctx, cert, servername);
-}
-
-int
-tls_configure_verify(struct tls *ctx)
-{
-	if (ctx->config->verify_cert) {
-		SSL_CTX_set_verify(ctx->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-
-		if (ctx->config->ca_mem != NULL) {
-			if (ctx->config->ca_len > INT_MAX) {
-				tls_set_error(ctx, "ca too long");
-				goto err;
-			}
-
-			if (SSL_CTX_load_verify_mem(ctx->ssl_ctx,
-			    ctx->config->ca_mem, ctx->config->ca_len) != 1) {
-				tls_set_error(ctx,
-				    "ssl verify memory setup failure");
-				goto err;
-			}
-		} else if (SSL_CTX_load_verify_locations(ctx->ssl_ctx,
-		    ctx->config->ca_file, ctx->config->ca_path) != 1) {
-			tls_set_error(ctx, "ssl verify setup failure");
-			goto err;
-		}
-		if (ctx->config->verify_depth >= 0)
-			SSL_CTX_set_verify_depth(ctx->ssl_ctx,
-			    ctx->config->verify_depth);
-	}
-	return 0;
-err:
-	return -1;
+	return tls_check_common_name(ctx, cert, name);
 }
 
 #endif /* USUAL_LIBSSL_FOR_TLS */

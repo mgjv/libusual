@@ -81,11 +81,13 @@ tls_config_new(void)
 	tls_config_set_protocols(config, TLS_PROTOCOLS_DEFAULT);
 	tls_config_set_verify_depth(config, 6);
 	
+	tls_config_prefer_ciphers_server(config);
+
 	tls_config_verify(config);
 
 	return (config);
 
-err:
+ err:
 	tls_config_free(config);
 	return (NULL);
 }
@@ -216,6 +218,11 @@ tls_config_set_ciphers(struct tls_config *config, const char *ciphers)
 	else if (strcasecmp(ciphers, "compat") == 0 ||
 	    strcasecmp(ciphers, "legacy") == 0)
 		ciphers = TLS_CIPHERS_COMPAT;
+	else if (strcasecmp(ciphers, "insecure") == 0 ||
+	    strcasecmp(ciphers, "all") == 0)
+		ciphers = TLS_CIPHERS_ALL;
+	else if (strcasecmp(ciphers, "normal") == 0)
+		ciphers = TLS_CIPHERS_NORMAL;
 	else if (strcasecmp(ciphers, "fast") == 0)
 		ciphers = TLS_CIPHERS_FAST;
 
@@ -273,6 +280,22 @@ tls_config_set_key_mem(struct tls_config *config, const uint8_t *key,
 	return set_mem(&config->key_mem, &config->key_len, key, len);
 }
 
+int
+tls_config_set_ocsp_stapling_file(struct tls_config *config, const char *blob_file)
+{
+	tls_config_set_ocsp_stapling_mem(config, NULL, 0);
+
+	return set_string(&config->ocsp_file, blob_file);
+}
+
+int
+tls_config_set_ocsp_stapling_mem(struct tls_config *config, const uint8_t *blob, size_t len)
+{
+	tls_config_set_ocsp_stapling_file(config, NULL);
+
+	return set_mem(&config->ocsp_mem, &config->ocsp_len, blob, len);
+}
+
 void
 tls_config_set_protocols(struct tls_config *config, uint32_t protocols)
 {
@@ -283,6 +306,18 @@ void
 tls_config_set_verify_depth(struct tls_config *config, int verify_depth)
 {
 	config->verify_depth = verify_depth;
+}
+
+void
+tls_config_prefer_ciphers_client(struct tls_config *config)
+{
+	config->ciphers_server = 0;
+}
+
+void
+tls_config_prefer_ciphers_server(struct tls_config *config)
+{
+	config->ciphers_server = 1;
 }
 
 void
@@ -298,10 +333,29 @@ tls_config_insecure_noverifyname(struct tls_config *config)
 }
 
 void
+tls_config_insecure_noverifytime(struct tls_config *config)
+{
+	config->verify_time = 0;
+}
+
+void
 tls_config_verify(struct tls_config *config)
 {
 	config->verify_cert = 1;
 	config->verify_name = 1;
+	config->verify_time = 1;
+}
+
+void
+tls_config_verify_client(struct tls_config *config)
+{
+	config->verify_client = 1;
+}
+
+void
+tls_config_verify_client_optional(struct tls_config *config)
+{
+	config->verify_client = 2;
 }
 
 #endif /* USUAL_LIBSSL_FOR_TLS */

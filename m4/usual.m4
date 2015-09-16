@@ -213,7 +213,7 @@ AC_CHECK_FUNCS(posix_memalign memalign valloc explicit_bzero memset_s reallocarr
 AC_CHECK_FUNCS(getopt getopt_long getopt_long_only)
 AC_CHECK_FUNCS(fls flsl flsll ffs ffsl ffsll)
 AC_CHECK_FUNCS(fnmatch mbsnrtowcs nl_langinfo strtod_l strtonum)
-AC_CHECK_FUNCS(asprintf vasprintf)
+AC_CHECK_FUNCS(asprintf vasprintf timegm)
 ### Functions provided only on win32
 AC_CHECK_FUNCS(localtime_r gettimeofday recvmsg sendmsg usleep getrusage)
 ### Functions used by libusual itself
@@ -341,21 +341,11 @@ AC_LINK_IFELSE([AC_LANG_SOURCE([
     struct event ev;
     event_init();
     event_set(&ev, 1, EV_READ, NULL, NULL);
-    /* this checks for 1.2+ but next we check for 1.3b+ anyway */
-    /* event_base_free(NULL); */
+    /* this checks for 1.2+ */
+    event_base_free(NULL);
   } ])],
 [AC_MSG_RESULT([found])],
 [AC_MSG_ERROR([not found, cannot proceed])])
-
-dnl libevent < 1.3b crashes on event_base_free()
-dnl no good way to check libevent version.  use hack:
-dnl evhttp.h defines HTTP_SERVUNAVAIL only since 1.3b
-AC_MSG_CHECKING([whether libevent version >= 1.3b])
-AC_EGREP_CPP([HTTP_SERVUNAVAIL],
-[#include <evhttp.h>
-  HTTP_SERVUNAVAIL ],
-[AC_MSG_ERROR([no, cannot proceed])],
-[AC_MSG_RESULT([yes])])
 
 AC_CHECK_FUNCS(event_loopbreak event_base_new evdns_base_new)
 have_libevent=yes
@@ -497,6 +487,8 @@ if test "$tls_support" = "auto" -o "$tls_support" = "libssl"; then
   fi
   AC_DEFINE_UNQUOTED(USUAL_TLS_CA_FILE, ["$cafile"], [Path to root CA certs.])
   AC_MSG_RESULT([$cafile])
+else
+  AC_MSG_RESULT([no])
 fi
 
 AC_SUBST(tls_support)
