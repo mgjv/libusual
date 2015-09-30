@@ -14,7 +14,7 @@ Notes for Mac OSX
 
 Mac OSX ships with an old version of openssl. Install a newer version (use homebrew or something like that), and configure with that new one
 
-$ ./configure --with-openssl=/usr/local/Cellar/openssl/1.0.2d/
+$ ./configure --with-openssl=/usr/local/opt/openssl/
 $ make
 
 of course, you need to replace that path with wherever your openssl is.
